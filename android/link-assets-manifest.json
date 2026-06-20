@@ -1,0 +1,17 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/Cafe24PROSlim-Bold.otf",
+      "sha1": "d1537118aad424b7b345eb32f9a1d6128270cba6"
+    },
+    {
+      "path": "assets/fonts/Cafe24PROSlim-Light.otf",
+      "sha1": "d360260cdae37d70a888988a18f6501ae61495a2"
+    },
+    {
+      "path": "assets/fonts/Cafe24PROSlim-Regular.otf",
+      "sha1": "502f147b21dacf36591430b5d11398b570a2bea3"
+    }
+  ]
+}
