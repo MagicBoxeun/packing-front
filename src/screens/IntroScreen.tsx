@@ -32,6 +32,11 @@ const H = win.height || 844;
 const GLOW = require('../../assets/intro-glow.png');
 const GLOW_SPY = require('../../assets/intro-glow-spy.png');
 const SPY = require('../../assets/intro-spy.png');
+// "산업스파이"는 GraceSerif로 미리 렌더한 이미지. 기기 폰트 로딩 깨짐 회피.
+const TITLE = require('../../assets/intro-title.png');
+
+const TITLE_W = W * 0.46;
+const TITLE_H = TITLE_W / 5.351; // intro-title.png 가로/세로 비율
 
 const SPY_W = W * 0.41;
 const SPY_H = SPY_W * (800 / 475); // 원본 비율 유지
@@ -83,10 +88,10 @@ function Dots() {
 function PanelBody({ panel }: { panel: Panel }) {
   if (panel.kind === 'title') {
     return (
-      <Text style={styles.body}>
-        <Text style={styles.titleRed}>산업스파이</Text>
-        <Text> 입니다!</Text>
-      </Text>
+      <View style={styles.titleRow}>
+        <Image source={TITLE} style={styles.titleImg} resizeMode="contain" />
+        <Text style={styles.body}> 입니다!</Text>
+      </View>
     );
   }
   const last = panel.lines.length - 1;
@@ -183,11 +188,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  titleRed: {
-    fontFamily: 'GraceSerif',
-    fontSize: W * 0.078,
-    color: '#af0202',
-  },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  titleImg: { width: TITLE_W, height: TITLE_H },
   spy: {
     position: 'absolute',
     top: H * 0.34,
