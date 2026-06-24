@@ -2,26 +2,75 @@ import React from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { ActionPill, DarkStage, ScreenFrame, TopGlow } from '../components/common';
-import { BoxImg, ParcelTopCard, ShippingLabelCard } from '../components/parcel';
+import {
+  ActionPill,
+  DarkStage,
+  ScreenFrame,
+  TopGlow,
+} from '../components/common';
+import { Barcode, BoxImg, ShippingLabelCard } from '../components/parcel';
+import { InteractivePeelStage } from '../features/tape/InteractivePeelStage';
 import { TapedCubeDisplay } from '../features/tape/TapedCubeDisplay';
 import { styles } from '../styles';
-import { TapeData } from '../types';
+import { TapeData, TapeWrapGroup } from '../types';
 
-const SIDE_BURST_PARTICLES = [
-  { color: '#fff3a8', delay: 0, dx: 132, dy: -74, size: 8, x: '0%', y: '38%' },
-  { color: '#ff6f8f', delay: 34, dx: 156, dy: -28, size: 7, x: '0%', y: '46%' },
-  { color: '#7fe4ff', delay: 66, dx: 126, dy: 32, size: 6, x: '0%', y: '54%' },
-  { color: '#8fffcb', delay: 20, dx: 174, dy: 72, size: 8, x: '0%', y: '62%' },
-  { color: '#ffe2f0', delay: 54, dx: 104, dy: 106, size: 6, x: '0%', y: '70%' },
-  { color: '#b9a7ff', delay: 86, dx: 190, dy: -96, size: 7, x: '0%', y: '34%' },
-  { color: '#ffd36a', delay: 10, dx: -132, dy: -74, size: 8, x: '100%', y: '38%' },
-  { color: '#ffffff', delay: 44, dx: -156, dy: -28, size: 6, x: '100%', y: '46%' },
-  { color: '#ff8f5f', delay: 76, dx: -126, dy: 32, size: 7, x: '100%', y: '54%' },
-  { color: '#7fe4ff', delay: 30, dx: -174, dy: 72, size: 8, x: '100%', y: '62%' },
-  { color: '#fff3a8', delay: 64, dx: -104, dy: 106, size: 6, x: '100%', y: '70%' },
-  { color: '#ff6f8f', delay: 96, dx: -190, dy: -96, size: 7, x: '100%', y: '34%' },
+const SIDE_BURST_COLORS = [
+  '#ffffff',
+  '#f6f1ff',
+  '#eadfff',
+  '#d8c8ff',
+  '#cbd8ff',
+  '#bfe6ff',
+  '#eaf7ff',
 ];
+
+const SIDE_BURST_PATHS = [
+  { delay: 0, dx: 118, dy: -132, size: 5, y: '32%' },
+  { delay: 8, dx: 146, dy: -106, size: 7, y: '35%' },
+  { delay: 16, dx: 176, dy: -78, size: 5, y: '38%' },
+  { delay: 24, dx: 210, dy: -48, size: 8, y: '41%' },
+  { delay: 32, dx: 136, dy: -38, size: 4, y: '44%' },
+  { delay: 40, dx: 232, dy: -14, size: 6, y: '46%' },
+  { delay: 48, dx: 164, dy: 8, size: 5, y: '48%' },
+  { delay: 56, dx: 258, dy: 24, size: 7, y: '50%' },
+  { delay: 64, dx: 126, dy: 42, size: 6, y: '52%' },
+  { delay: 72, dx: 198, dy: 58, size: 4, y: '54%' },
+  { delay: 80, dx: 276, dy: 76, size: 6, y: '56%' },
+  { delay: 88, dx: 152, dy: 92, size: 8, y: '58%' },
+  { delay: 96, dx: 224, dy: 112, size: 5, y: '60%' },
+  { delay: 104, dx: 178, dy: 136, size: 6, y: '62%' },
+  { delay: 112, dx: 252, dy: 154, size: 4, y: '64%' },
+  { delay: 120, dx: 106, dy: 112, size: 5, y: '66%' },
+  { delay: 128, dx: 202, dy: 176, size: 7, y: '68%' },
+  { delay: 136, dx: 282, dy: 132, size: 5, y: '70%' },
+  { delay: 144, dx: 142, dy: -172, size: 4, y: '30%' },
+  { delay: 152, dx: 236, dy: -146, size: 6, y: '33%' },
+  { delay: 160, dx: 288, dy: -92, size: 4, y: '37%' },
+  { delay: 168, dx: 304, dy: -30, size: 5, y: '43%' },
+  { delay: 176, dx: 310, dy: 36, size: 4, y: '49%' },
+  { delay: 184, dx: 296, dy: 98, size: 6, y: '55%' },
+  { delay: 192, dx: 270, dy: 188, size: 5, y: '61%' },
+  { delay: 200, dx: 220, dy: 222, size: 4, y: '67%' },
+  { delay: 208, dx: 166, dy: 204, size: 5, y: '72%' },
+  { delay: 216, dx: 116, dy: 168, size: 4, y: '74%' },
+  { delay: 224, dx: 246, dy: -206, size: 5, y: '29%' },
+  { delay: 232, dx: 318, dy: 158, size: 4, y: '71%' },
+];
+
+const SIDE_BURST_PARTICLES = SIDE_BURST_PATHS.flatMap((particle, index) => [
+  {
+    ...particle,
+    color: SIDE_BURST_COLORS[index % SIDE_BURST_COLORS.length],
+    x: '0%',
+  },
+  {
+    ...particle,
+    color: SIDE_BURST_COLORS[(index + 3) % SIDE_BURST_COLORS.length],
+    delay: particle.delay + 10,
+    dx: -particle.dx,
+    x: '100%',
+  },
+]);
 
 const SIDE_BURST_HTML = `<!DOCTYPE html>
 <html>
@@ -91,32 +140,65 @@ function SideParticleBurst() {
   );
 }
 
+function ReplyLabelEditor({
+  onReplyChange,
+  replyDraft,
+}: {
+  onReplyChange: (value: string) => void;
+  replyDraft: string;
+}) {
+  return (
+    <View style={styles.attachLabelCard}>
+      <View style={styles.attachLabelHeader}>
+        <Barcode />
+        <Text style={styles.attachLabelTitle}>송장번호</Text>
+        <Barcode />
+      </View>
+      <View style={styles.attachLabelInfo}>
+        <Text style={styles.attachLabelSmall}>from.</Text>
+        <Text style={styles.attachLabelSmall}>to.</Text>
+      </View>
+      <View style={styles.attachMemoBox}>
+        <View style={styles.attachMemoTag}>
+          <Text style={styles.attachMemoTagText}>{'내\n용'}</Text>
+        </View>
+        <TextInput
+          multiline
+          onChangeText={onReplyChange}
+          placeholder="받은 편지에 답장을 적어보세요"
+          placeholderTextColor="#8d8880"
+          style={styles.attachReplyInput}
+          value={replyDraft}
+        />
+      </View>
+    </View>
+  );
+}
+
 type TearPackageScreenProps = {
-  apiBusy: boolean;
   apiMessage: string;
-  onTear: () => void;
-  tearCount: number;
+  onPeeled: (remaining: number) => void;
+  onPutBack: (remaining: number) => void;
+  onRemainingChange: (remaining: number) => void;
+  wrapGroups: TapeWrapGroup[];
 };
 
 export function TearPackageScreen({
-  apiBusy,
   apiMessage,
-  onTear,
-  tearCount,
+  onPeeled,
+  onPutBack,
+  onRemainingChange,
+  wrapGroups,
 }: TearPackageScreenProps) {
   return (
     <ScreenFrame>
-      <DarkStage
-        accent={`(${tearCount}/3)`}
-        accentDone={tearCount === 3}
-        box={<BoxImg variant="taped" />}
-        helper="상자를 세 번 탭해 뜯어주세요."
-        onBoxPress={() => {
-          if (!apiBusy) {
-            onTear();
-          }
-        }}
+      <InteractivePeelStage
+        boxVariant="label"
+        onPeeled={onPeeled}
+        onPutBack={onPutBack}
+        onRemainingChange={onRemainingChange}
         title="소포를 뜯어주세요!"
+        wrapGroups={wrapGroups}
       />
       {apiMessage ? <Text style={styles.stageError}>{apiMessage}</Text> : null}
     </ScreenFrame>
@@ -172,23 +254,16 @@ export function AttachMessageScreen({
 }: AttachMessageScreenProps) {
   return (
     <ScreenFrame>
-      <View style={styles.darkStage}>
+      <View style={styles.attachStage}>
         <TopGlow />
-        <Text style={[styles.stageTitle, styles.stageTitleStandalone]}>
-          택배에 글을 부착해보세요
-        </Text>
-        <View style={styles.stageBoxWrap}>
-          <ParcelTopCard />
-        </View>
-        <View style={styles.replyEditor}>
-          <Text style={styles.replyLabel}>답장</Text>
-          <TextInput
-            multiline
-            onChangeText={onReplyChange}
-            placeholder="받은 편지에 답장을 적어보세요"
-            placeholderTextColor="#8f8aa1"
-            style={styles.replyInput}
-            value={replyDraft}
+        <Text style={styles.attachTitle}>택배에 글을 부착해보세요</Text>
+        <View style={styles.attachScene}>
+          <View style={styles.attachBoxWrap}>
+            <BoxImg variant="plain" size={276} />
+          </View>
+          <ReplyLabelEditor
+            onReplyChange={onReplyChange}
+            replyDraft={replyDraft}
           />
         </View>
         <ActionPill
@@ -196,7 +271,9 @@ export function AttachMessageScreen({
           label="송장 붙이기"
           onPress={onAttach}
         />
-        {apiMessage ? <Text style={styles.stageError}>{apiMessage}</Text> : null}
+        {apiMessage ? (
+          <Text style={styles.stageError}>{apiMessage}</Text>
+        ) : null}
       </View>
     </ScreenFrame>
   );

@@ -75,6 +75,11 @@ beforeEach(() => {
       return jsonResponse({
         items: [
           {
+            id: 'parcel-own',
+            nickname: '용감한 코알라',
+            tagline: '내가 보낸 소포',
+          },
+          {
             id: 'parcel-1',
             nickname: '익명의 고래',
             tagline: '늦잠을 버스 탓으로 돌렸어요',
@@ -155,21 +160,27 @@ async function pressByA11y(tree: any, a11y: string) {
   });
 }
 
-async function pressBox(tree: any) {
-  // DarkStage tap target: a Pressable with onPress but no Text descendant
-  const target = tree.root
-    .findAll((n: any) => n.type === 'Pressable' && !!n.props.onPress)
-    .find((p: any) => textOf(p).trim() === '');
-  await ReactTestRenderer.act(async () => {
-    await target.props.onPress();
-  });
-}
-
 function setInput(tree: any, placeholder: string, value: string) {
   const input = tree.root.find(
     (n: any) => n.type === 'TextInput' && n.props.placeholder === placeholder,
   );
   ReactTestRenderer.act(() => input.props.onChangeText(value));
+}
+
+async function finishIntro(tree: any) {
+  // 네이티브 IntroScreen은 화면 탭으로 패널을 넘긴다. 6개 패널 모두 눌러 종료.
+  for (let i = 0; i < 6; i++) {
+    const pressable = tree.root.findAll(
+      (n: any) => n.type === 'Pressable' && typeof n.props.onPress === 'function',
+    )[0];
+    if (!pressable) {
+      break;
+    }
+    await ReactTestRenderer.act(async () => {
+      pressable.props.onPress();
+      await Promise.resolve();
+    });
+  }
 }
 
 function finishTaping(tree: any) {
@@ -188,6 +199,22 @@ function finishTaping(tree: any) {
     }),
   );
   return press(tree, '포장완료');
+}
+
+async function finishPeeling(tree: any) {
+  // InteractivePeelStage reports peel completion via the (mocked) WebView onMessage.
+  const wv = tree.root.find(
+    (n: any) => n.type === 'View' && typeof n.props.onMessage === 'function',
+  );
+  await ReactTestRenderer.act(async () => {
+    wv.props.onMessage({
+      nativeEvent: {
+        data: JSON.stringify({ remaining: 0, done: true }),
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 const has = (tree: any, s: string) =>
@@ -217,6 +244,9 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
   setInput(tree, '비밀번호 8자 이상', 'password123');
   await press(tree, '로그인');
 
+  // 로그인 후 인트로(산업 스파이) 시퀀스를 건너뛴다.
+  await finishIntro(tree);
+
   // landing -> locker-grid via steal CTA
   expect(has(tree, '당신만의 고해성사')).toBe(true);
   await press(tree, '소포 훔치기');
@@ -224,6 +254,7 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
     await Promise.resolve();
   });
   expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
+  expect(has(tree, '용감한 코알라')).toBe(false);
   await pressByA11y(tree, '뒤로');
   expect(has(tree, '당신만의 고해성사')).toBe(true);
 
@@ -255,7 +286,7 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
   expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
 
   // locker-grid: pick a package -> locker-detail
-  await press(tree, 'from.');
+  await press(tree, '익명의 고래');
   expect(has(tree, '이 소포 열기')).toBe(true);
 
   // FIXED dead control #5: back arrow -> back to locker-grid
@@ -265,17 +296,21 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
   });
   expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
 
-  // locker-detail -> tear-package, tap box x3 -> opened
-  await press(tree, 'from.');
+  // locker-detail -> tear-package, peel all tape -> opened
+  await press(tree, '익명의 고래');
   await press(tree, '이 소포 열기');
   expect(has(tree, '소포를 뜯어주세요')).toBe(true);
-  await pressBox(tree);
-  await pressBox(tree);
-  await pressBox(tree);
+  await finishPeeling(tree);
   await ReactTestRenderer.act(async () => {
     jest.advanceTimersByTime(300);
     await Promise.resolve();
   });
+  const openCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+    ([url, options]: [string, { method?: string }]) =>
+      String(url).endsWith('/parcels/parcel-1/open') &&
+      options?.method === 'POST',
+  );
+  expect(openCall?.[1]?.body).toBe(JSON.stringify({ tapeWraps: [] }));
   await press(tree, '편지 보기');
 
   // letter-read -> FIXED dead control #2: "답장 달기" -> attach-message

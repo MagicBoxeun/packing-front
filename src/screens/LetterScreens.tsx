@@ -5,6 +5,8 @@ import { ActionPill, ScreenFrame, TopGlow, WarehouseBackground } from '../compon
 import { BoxImg } from '../components/parcel';
 import { styles } from '../styles';
 
+const LETTER_RULE_COUNT = 7;
+
 type LetterComposeScreenProps = {
   apiMessage: string;
   messageDraft: string;
@@ -34,7 +36,7 @@ export function LetterComposeScreen({
               value={messageDraft}
             />
             <View style={styles.ruledLines} pointerEvents="none">
-              {Array.from({ length: 7 }).map((_, index) => (
+              {Array.from({ length: LETTER_RULE_COUNT }).map((_, index) => (
                 <View key={`line-${index}`} style={styles.paperRule} />
               ))}
             </View>
@@ -65,13 +67,13 @@ export function LetterReadScreen({ content, onReply }: LetterReadScreenProps) {
         <LetterTopBox />
         <View style={styles.paperCard}>
           <Text style={styles.paperTo}>To. 누군가</Text>
-          <View style={styles.paperLines}>
-            {content.split('\n').map((line, index) => (
-              <View key={`line-${index}`} style={styles.paperLineRow}>
-                <Text style={styles.paperBody}>{line || ' '}</Text>
-                <View style={styles.paperRule} />
-              </View>
-            ))}
+          <View style={styles.ruledTextArea}>
+            <Text style={styles.paperReadBody}>{content || ' '}</Text>
+            <View style={styles.ruledLines} pointerEvents="none">
+              {Array.from({ length: LETTER_RULE_COUNT }).map((_, index) => (
+                <View key={`line-${index}`} style={styles.paperRule} />
+              ))}
+            </View>
           </View>
           <View style={styles.paperActionRow}>
             <ActionPill label="답장 달기" onPress={onReply} />

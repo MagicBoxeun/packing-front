@@ -1,10 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Pressable, StatusBar, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthSession, PackingApi, ParcelCreated, ParcelFeedItem } from '../api';
 import { DARK, DEV_STEP, FALLBACK_PACKAGES } from './constants';
 import { AuthScreen } from './screens/AuthScreen';
+import { IntroScreen } from './screens/IntroScreen';
 import { LandingScreen } from './screens/LandingScreen';
 import { LetterComposeScreen, LetterReadScreen } from './screens/LetterScreens';
 import { LockerDetailScreen, LockerGridScreen } from './screens/LockerScreens';
@@ -21,11 +28,55 @@ import {
   TapePackingScreen,
 } from './screens/StageScreens';
 import { styles } from './styles';
-import { AutoStep, Step, TapeData } from './types';
+import {
+  buildTapeWrapsForParcel,
+  tapeWrapsFromApi,
+} from './features/tape/tapeWraps';
+import { AutoStep, Step, TapeData, TapeWrapGroup } from './types';
+
+function isOwnParcel(
+  pkg: ParcelFeedItem,
+  auth: AuthSession | null,
+  createdParcel: ParcelCreated | null,
+) {
+  if (createdParcel?.id === pkg.id) {
+    return true;
+  }
+  if (!auth) {
+    return false;
+  }
+  const ownerId = pkg.authorId ?? pkg.userId ?? pkg.ownerId ?? pkg.senderId;
+  return ownerId === auth.user.id || pkg.nickname === auth.user.nickname;
+}
+
+function tapeWrapsForParcel(
+  pkg: ParcelFeedItem,
+  remainingById: Record<string, number>,
+): TapeWrapGroup[] {
+  const originalWraps = originalTapeWrapsForParcel(pkg);
+  const remaining = remainingById[pkg.id];
+  return typeof remaining === 'number'
+    ? originalWraps.slice(0, remaining)
+    : originalWraps;
+}
+
+function originalTapeWrapsForParcel(pkg: ParcelFeedItem): TapeWrapGroup[] {
+  return tapeWrapsFromApi(pkg) ?? buildTapeWrapsForParcel(pkg.id);
+}
+
+function remainingTapeWrapsForParcel(
+  pkg: ParcelFeedItem,
+  remaining: number,
+): TapeWrapGroup[] {
+  return originalTapeWrapsForParcel(pkg).slice(0, Math.max(0, remaining));
+}
 
 export default function AppFlow() {
   const insets = useSafeAreaInsets();
   const apiRef = useRef(new PackingApi());
+  const skipNextFeedRefreshRef = useRef(false);
+  // 인트로(산업 스파이)는 첫 로그인 1회만. 로그아웃 후 재로그인 시엔 생략.
+  const introSeenRef = useRef(false);
   const [stepState, setStep] = useState<Step>('auth');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [emailDraft, setEmailDraft] = useState('');
@@ -45,9 +96,17 @@ export default function AppFlow() {
   );
   const [apiBusy, setApiBusy] = useState(false);
   const [apiMessage, setApiMessage] = useState('');
-  const [tearCount, setTearCount] = useState(0);
+  const [peelRemaining, setPeelRemaining] = useState<Record<string, number>>(
+    {},
+  );
   const [packedTapes, setPackedTapes] = useState<TapeData[]>([]);
-  const displayPackages = DEV_STEP ? FALLBACK_PACKAGES : feedPackages;
+  const displayPackages = useMemo(
+    () =>
+      (DEV_STEP ? FALLBACK_PACKAGES : feedPackages).filter(
+        pkg => !isOwnParcel(pkg, auth, createdParcel),
+      ),
+    [auth, createdParcel, feedPackages],
+  );
   const selectedPackage = DEV_STEP
     ? displayPackages[0]?.id ?? null
     : selectedPackageState;
@@ -86,7 +145,7 @@ export default function AppFlow() {
   const resetFlow = useCallback(() => {
     setStep('landing');
     setSelectedPackage(null);
-    setTearCount(0);
+    setPeelRemaining({});
     setMessageDraft('');
     setReplyDraft('');
     setOpenedContent('');
@@ -106,12 +165,24 @@ export default function AppFlow() {
     setApiBusy(true);
     setApiMessage('');
     try {
-      const nextAuth =
-        authMode === 'login'
-          ? await apiRef.current.login(email, password)
-          : await apiRef.current.signup(email, password);
+      if (authMode === 'signup') {
+        // 가입만 처리하고 자동 로그인하지 않는다. 로그인 모드로 전환 후 직접 로그인.
+        await apiRef.current.signup(email, password);
+        apiRef.current.setTokens(null, null);
+        setAuthMode('login');
+        setPasswordDraft('');
+        setApiMessage('가입이 완료됐어요. 로그인해주세요.');
+        return;
+      }
+
+      const nextAuth = await apiRef.current.login(email, password);
       setAuth(nextAuth);
-      setStep('landing');
+      if (introSeenRef.current) {
+        setStep('landing');
+      } else {
+        introSeenRef.current = true;
+        setStep('intro');
+      }
     } catch (error) {
       setApiMessage(
         error instanceof Error ? error.message : '인증에 실패했어요.',
@@ -140,7 +211,7 @@ export default function AppFlow() {
       setReplyDraft('');
       setOpenedContent('');
       setCreatedParcel(null);
-      setTearCount(0);
+      setPeelRemaining({});
       setPackedTapes([]);
       setApiMessage('');
       setApiBusy(false);
@@ -171,9 +242,24 @@ export default function AppFlow() {
 
   useEffect(() => {
     if (step === 'locker-grid') {
+      if (skipNextFeedRefreshRef.current) {
+        skipNextFeedRefreshRef.current = false;
+        return;
+      }
       refreshFeed();
     }
   }, [refreshFeed, step]);
+
+  const applyParcelTapeWraps = useCallback(
+    (parcelId: string, tapeWraps: TapeWrapGroup[]) => {
+      setFeedPackages(prev =>
+        prev.map(pkg =>
+          pkg.id === parcelId ? { ...pkg, tapeWraps, tapes: undefined } : pkg,
+        ),
+      );
+    },
+    [],
+  );
 
   const handleCreateParcel = useCallback(async () => {
     if (!auth || messageDraft.trim().length < 10) {
@@ -192,6 +278,7 @@ export default function AppFlow() {
         nickname: auth.user.nickname,
         tagline,
         content,
+        tapes: packedTapes,
       });
       setCreatedParcel(parcel);
       goTo('loading-send');
@@ -202,23 +289,24 @@ export default function AppFlow() {
     } finally {
       setApiBusy(false);
     }
-  }, [auth, messageDraft]);
+  }, [auth, messageDraft, packedTapes]);
 
-  const handleOpenParcel = useCallback(async () => {
+  const handleOpenParcel = useCallback(async (tapeWraps?: TapeWrapGroup[]) => {
     if (!selectedPackage) {
       setApiMessage('열 소포를 먼저 골라주세요.');
-      setTearCount(0);
       return;
     }
 
     setApiBusy(true);
     setApiMessage('');
     try {
-      const result = await apiRef.current.openParcel(selectedPackage);
+      const result = await apiRef.current.openParcel(
+        selectedPackage,
+        tapeWraps ? { tapeWraps } : undefined,
+      );
       setOpenedContent(result.content);
       setTimeout(() => goTo('opened'), 250);
     } catch (error) {
-      setTearCount(0);
       setApiMessage(
         error instanceof Error ? error.message : '소포를 열지 못했어요.',
       );
@@ -247,13 +335,77 @@ export default function AppFlow() {
     }
   }, [replyDraft, selectedPackage]);
 
-  const handleTearPackage = useCallback(() => {
-    const nextCount = Math.min(tearCount + 1, 3);
-    setTearCount(nextCount);
-    if (nextCount === 3) {
-      handleOpenParcel();
-    }
-  }, [handleOpenParcel, tearCount]);
+  const peelWrapGroups = selectedParcel
+    ? tapeWrapsForParcel(selectedParcel, peelRemaining)
+    : [];
+
+  const handlePeelRemaining = useCallback(
+    (remaining: number) => {
+      if (!selectedPackage) {
+        return;
+      }
+      setPeelRemaining(prev => ({ ...prev, [selectedPackage]: remaining }));
+    },
+    [selectedPackage],
+  );
+
+  const handlePutBackAfterPeel = useCallback(
+    async (remaining: number) => {
+      if (!selectedPackage || !selectedParcel) {
+        goTo('locker-grid');
+        return;
+      }
+
+      const tapeWraps = remainingTapeWrapsForParcel(selectedParcel, remaining);
+      setPeelRemaining(prev => ({ ...prev, [selectedPackage]: remaining }));
+      applyParcelTapeWraps(selectedPackage, tapeWraps);
+      skipNextFeedRefreshRef.current = true;
+      setApiBusy(true);
+      setApiMessage('');
+      try {
+        const updatedParcel = await apiRef.current.updateParcelTapeWraps(
+          selectedPackage,
+          tapeWraps,
+        );
+        setFeedPackages(prev =>
+          prev.map(pkg =>
+            pkg.id === selectedPackage
+              ? {
+                  ...pkg,
+                  ...updatedParcel,
+                  tapeWraps: updatedParcel.tapeWraps ?? tapeWraps,
+                }
+              : pkg,
+          ),
+        );
+      } catch (error) {
+        setApiMessage(
+          error instanceof Error
+            ? error.message
+            : '테이프 상태를 저장하지 못했어요.',
+        );
+      } finally {
+        setApiBusy(false);
+        setStep('locker-grid');
+      }
+    },
+    [applyParcelTapeWraps, selectedPackage, selectedParcel],
+  );
+
+  const handlePeeledAll = useCallback(
+    (remaining: number) => {
+      if (!selectedPackage || !selectedParcel) {
+        handleOpenParcel();
+        return;
+      }
+
+      const tapeWraps = remainingTapeWrapsForParcel(selectedParcel, remaining);
+      setPeelRemaining(prev => ({ ...prev, [selectedPackage]: remaining }));
+      applyParcelTapeWraps(selectedPackage, tapeWraps);
+      handleOpenParcel(tapeWraps);
+    },
+    [applyParcelTapeWraps, handleOpenParcel, selectedPackage, selectedParcel],
+  );
 
   const letterContent =
     (selectedPackage !== null ? openedContent : messageDraft) ||
@@ -263,7 +415,7 @@ export default function AppFlow() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={DARK} />
-      {step !== 'landing' && step !== 'auth' ? (
+      {step !== 'landing' && step !== 'auth' && step !== 'intro' ? (
         <Pressable
           accessibilityLabel="처음으로"
           onPress={resetFlow}
@@ -288,6 +440,10 @@ export default function AppFlow() {
             setAuthMode(mode => (mode === 'login' ? 'signup' : 'login'));
           }}
         />
+      ) : null}
+
+      {step === 'intro' ? (
+        <IntroScreen onDone={() => goTo('landing')} />
       ) : null}
 
       {step === 'landing' ? (
@@ -349,6 +505,7 @@ export default function AppFlow() {
         <LockerGridScreen
           apiMessage={apiMessage}
           feedLoading={feedLoading}
+          getTapeWraps={pkg => tapeWrapsForParcel(pkg, peelRemaining)}
           packages={displayPackages}
           onBack={() => goTo('landing')}
           onSelect={id => {
@@ -361,21 +518,20 @@ export default function AppFlow() {
 
       {step === 'locker-detail' ? (
         <LockerDetailScreen
+          getTapeWraps={pkg => tapeWrapsForParcel(pkg, peelRemaining)}
           selectedParcel={selectedParcel}
           onBack={() => goTo('locker-grid')}
-          onOpen={() => {
-            setTearCount(0);
-            goTo('tear-package');
-          }}
+          onOpen={() => goTo('tear-package')}
         />
       ) : null}
 
       {step === 'tear-package' ? (
         <TearPackageScreen
-          apiBusy={apiBusy}
           apiMessage={apiMessage}
-          onTear={handleTearPackage}
-          tearCount={tearCount}
+          onPeeled={handlePeeledAll}
+          onPutBack={handlePutBackAfterPeel}
+          onRemainingChange={handlePeelRemaining}
+          wrapGroups={peelWrapGroups}
         />
       ) : null}
 
