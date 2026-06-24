@@ -249,6 +249,14 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
 
   // landing -> locker-grid via steal CTA
   expect(has(tree, '당신만의 고해성사')).toBe(true);
+  await press(tree, '택배 보관함');
+  await ReactTestRenderer.act(async () => {
+    await Promise.resolve();
+  });
+  expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
+  await pressByA11y(tree, '뒤로');
+  expect(has(tree, '당신만의 고해성사')).toBe(true);
+
   await press(tree, '소포 훔치기');
   await ReactTestRenderer.act(async () => {
     await Promise.resolve();

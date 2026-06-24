@@ -22,7 +22,7 @@ export function LandingScreen({
     <ScreenFrame background={<WarehouseBackground variant="home" />}>
       <View style={styles.screenPadding}>
         <View style={styles.landingHeader}>
-          <TopBackLabel label="택배 보관함" boxed />
+          <TopBackLabel label="택배 보관함" boxed onPress={onOpenLocker} />
           <Pressable
             accessibilityLabel="로그아웃"
             disabled={apiBusy}

@@ -125,13 +125,17 @@ export function TopGlow() {
 }
 
 export function TopBackLabel({
+  accessibilityLabel,
   boxed,
   label,
   onBack,
+  onPress,
 }: {
+  accessibilityLabel?: string;
   boxed?: boolean;
   label: string;
   onBack?: () => void;
+  onPress?: () => void;
 }) {
   const content = (
     <View style={styles.topBackRow}>
@@ -140,11 +144,16 @@ export function TopBackLabel({
       <Text style={styles.topBackLabel}>{label}</Text>
     </View>
   );
-  if (!onBack) {
+  const pressHandler = onBack ?? onPress;
+  if (!pressHandler) {
     return content;
   }
   return (
-    <Pressable accessibilityLabel="뒤로" hitSlop={10} onPress={onBack}>
+    <Pressable
+      accessibilityLabel={accessibilityLabel ?? (onBack ? '뒤로' : label)}
+      hitSlop={10}
+      onPress={pressHandler}
+    >
       {content}
     </Pressable>
   );
