@@ -12,6 +12,10 @@
     {
       "path": "assets/fonts/Cafe24PROSlim-Regular.otf",
       "sha1": "502f147b21dacf36591430b5d11398b570a2bea3"
+    },
+    {
+      "path": "assets/fonts/GraceSerif.ttf",
+      "sha1": "59684fd71e816a52b1b0c5bbc8079078a75dbbe5"
     }
   ]
 }
