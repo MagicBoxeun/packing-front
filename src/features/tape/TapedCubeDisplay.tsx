@@ -7,19 +7,23 @@ import { BoxVariant, TapeData } from '../../types';
 import { displayCubeHtml } from './cubeHtml';
 
 export function TapedCubeDisplay({
+  disableSpin = false,
+  modelScale = 1.05,
   size = 248,
   stamp,
   tapes,
   variant,
 }: {
+  disableSpin?: boolean;
+  modelScale?: number;
   size?: number;
   stamp?: 'confession' | 'ok';
   tapes: TapeData[];
   variant: BoxVariant;
 }) {
   const html = useMemo(
-    () => displayCubeHtml(variant, tapes, stamp),
-    [variant, tapes, stamp],
+    () => displayCubeHtml(variant, tapes, stamp, disableSpin, modelScale),
+    [variant, tapes, stamp, disableSpin, modelScale],
   );
   return (
     <View style={{ height: size, width: size }}>

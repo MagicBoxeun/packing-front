@@ -3,9 +3,11 @@ import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 
 import { ParcelFeedItem } from '../../../api';
 import { BELT_ITEM_WIDTH } from '../../constants';
-import { BoxImg } from '../../components/parcel';
 import { TopBackLabel } from '../../components/common';
+import { TapedCubeDisplay } from '../tape/TapedCubeDisplay';
+import { flattenTapeWraps } from '../tape/tapeWraps';
 import { styles } from '../../styles';
+import { TapeWrapGroup } from '../../types';
 
 export function LockerShell({
   children,
@@ -31,14 +33,25 @@ type BeltPackage = {
   key: string;
 };
 
-
 const BELT_SPEED = 1.4;
 const BELT_TICK_MS = 16;
+const BELT_ITEM_SPACING = BELT_ITEM_WIDTH + 120;
+const BELT_VERTICAL_OFFSET = 246;
+const BELT_START_X = -BELT_ITEM_WIDTH - 40;
+
+function createBeltPositions(count: number) {
+  return Array.from(
+    { length: count },
+    (_, index) => BELT_START_X + index * BELT_ITEM_SPACING,
+  );
+}
 
 export function ConveyorBelt({
+  getTapeWraps,
   packages,
   onSelect,
 }: {
+  getTapeWraps: (pkg: ParcelFeedItem) => TapeWrapGroup[];
   packages: ParcelFeedItem[];
   onSelect: (id: string) => void;
 }) {
@@ -56,28 +69,39 @@ export function ConveyorBelt({
     return repeated;
   }, [packages]);
 
-  const [positions, setPositions] = useState<number[]>(() => {
-    let cursor = -BELT_ITEM_WIDTH - 40;
-    return items.map(() => {
-      const gap = BELT_ITEM_WIDTH + 50 + Math.random() * 170;
-      cursor += gap;
-      return cursor;
-    });
-  });
+  const [positions, setPositions] = useState<number[]>(() =>
+    createBeltPositions(items.length),
+  );
+
+  useEffect(() => {
+    setPositions(createBeltPositions(items.length));
+  }, [items.length]);
 
   useEffect(() => {
     const resetThreshold = beltWidth + BELT_ITEM_WIDTH + 40;
-    const resetX = -BELT_ITEM_WIDTH - 40;
     const interval = setInterval(() => {
-      setPositions(prev =>
-        prev.map(x => {
-          const next = x + BELT_SPEED;
-          return next > resetThreshold ? resetX : next;
-        }),
-      );
+      setPositions(prev => {
+        if (prev.length !== items.length) {
+          return createBeltPositions(items.length);
+        }
+        if (prev.length === 0) {
+          return prev;
+        }
+
+        const nextPositions = prev.map(x => x + BELT_SPEED);
+        let leftmost = Math.min(...nextPositions);
+        return nextPositions.map(x => {
+          if (x <= resetThreshold) {
+            return x;
+          }
+          const wrapped = leftmost - BELT_ITEM_SPACING;
+          leftmost = wrapped;
+          return wrapped;
+        });
+      });
     }, BELT_TICK_MS);
     return () => clearInterval(interval);
-  }, [beltWidth]);
+  }, [beltWidth, items.length]);
 
   return (
     <View style={styles.conveyorArea}>
@@ -88,12 +112,21 @@ export function ConveyorBelt({
           style={[
             styles.conveyorItem,
             {
-              transform: [{ translateX: positions[i] }, { translateY: 200 }],
+              transform: [
+                { translateX: positions[i] ?? BELT_START_X },
+                { translateY: BELT_VERTICAL_OFFSET },
+              ],
             },
           ]}
         >
-          <BoxImg variant="taped" size={140} />
-          <Text style={styles.packageFrom}>from. {pkg.nickname}</Text>
+          <TapedCubeDisplay
+            disableSpin
+            modelScale={0.75}
+            size={160}
+            tapes={flattenTapeWraps(getTapeWraps(pkg))}
+            variant="plain"
+          />
+          <Text style={styles.conveyorPackageFrom}>{pkg.nickname}</Text>
         </Pressable>
       ))}
     </View>

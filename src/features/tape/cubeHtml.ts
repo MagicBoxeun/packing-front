@@ -1,4 +1,4 @@
-import { BoxVariant, TapeData } from '../../types';
+import { BoxVariant, TapeData, TapeWrapGroup } from '../../types';
 
 export const MAX_TAPES = 50;
 
@@ -151,7 +151,7 @@ export function cubeHtml(variant: BoxVariant, soundDataUri: string): string {
   }
 
   var MAX_WRAPS = 30, wrapCount = 0;
-  var MAX = MAX_WRAPS * 4 + 8, SIDE = 150, HALF = SIDE / 2, TAPE_W = 22;
+  var MAX = MAX_WRAPS * 4 + 8, SIDE = 150, HALF = SIDE / 2, TAPE_W = 30;
   var ROLL_R = 19;
   var scene = document.getElementById('scene');
   var world = document.getElementById('world');
@@ -396,17 +396,256 @@ export function cubeHtml(variant: BoxVariant, soundDataUri: string): string {
 </html>`;
 }
 
+// Interactive UNWRAP stage: the box arrives wrapped with some number of tape
+// bands the receiver is never told. Each tap peels exactly one band off, but a
+// single receiver may only peel up to `maxPeels` times. It posts { done: true }
+// once the box is empty OR the tap allowance runs out.
+export function peelCubeHtml(
+  variant: BoxVariant,
+  wrapGroups: TapeWrapGroup[],
+  soundDataUri: string,
+  maxPeels: number,
+): string {
+  const hasLabel = variant === 'label';
+  const labelPatch = hasLabel ? CUBE_FACE_TEMPLATES.label : '';
+  const safeWrapGroups = wrapGroups.slice(0, MAX_TAPES);
+  const wrapGroupsJson = JSON.stringify(safeWrapGroups);
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: transparent; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #root { position: absolute; inset: 0; display: flex; flex-direction: column; touch-action: none; }
+  #stage {
+    flex: 1 1 auto; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    perspective: 720px; perspective-origin: 50% 48%;
+    cursor: grab;
+  }
+  #world { transform: scale(1.15); transform-style: preserve-3d; }
+  #world.press { animation: bounce 0.26s ease; }
+  @keyframes bounce { 0% { transform: scale(1.15); } 45% { transform: scale(1.07); } 100% { transform: scale(1.15); } }
+  #scene {
+    position: relative; width: 150px; height: 150px;
+    transform-style: preserve-3d; will-change: transform;
+  }
+  .face {
+    position: absolute; width: 150px; height: 150px;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; box-shadow: none; backface-visibility: hidden; overflow: hidden;
+  }
+  .f-front  { background: #d9a33b; transform: translateZ(75px); }
+  .f-back   { background: #c79032; transform: rotateY(180deg) translateZ(75px); }
+  .f-right  { background: #ffc55e; transform: rotateY(90deg) translateZ(75px); }
+  .f-left   { background: #d9a33b; transform: rotateY(-90deg) translateZ(75px); }
+  .f-top    { background: #ffd381; transform: rotateX(90deg) translateZ(75px); }
+  .f-bottom { background: #9b7028; transform: rotateX(-90deg) translateZ(75px); }
+  .f-top::before {
+    content: ''; position: absolute; display: block;
+    left: 50%; top: -6px; bottom: -6px; width: 2px;
+    background: rgba(137,92,26,0.45); transform: translateX(-1px);
+  }
+  .facelabel {
+    position: absolute; right: 10px; bottom: 10px; width: 58px; height: 40px;
+    background: #f5f1e6; border: 1px solid #5a4a28;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 5px 6px;
+  }
+  .lbl-line { height: 3px; background: #2c2c2c; width: 100%; }
+  .lbl-line.short { width: 58%; }
+  .tape {
+    position: absolute;
+    background: rgba(47, 95, 224, 0.78); border: 0; border-radius: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+    z-index: 5;
+  }
+  .tape::after {
+    content: ''; position: absolute; left: 3px; right: 3px; top: 2px; height: 2px;
+    background: rgba(255,255,255,0.28); border-radius: 1px;
+  }
+  .tape.peeling { transition: opacity 0.2s ease, filter 0.2s ease; opacity: 0; filter: blur(1px); }
+  .hint {
+    position: absolute; left: 0; right: 0; bottom: 10px; text-align: center;
+    color: rgba(255,255,255,0.4); font-size: 11px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="root">
+    <div id="stage">
+      <div id="world">
+        <div id="scene">
+          <div class="face f-front" data-face="front">${labelPatch}</div>
+          <div class="face f-back" data-face="back"></div>
+          <div class="face f-right" data-face="right"></div>
+          <div class="face f-left" data-face="left"></div>
+          <div class="face f-top" data-face="top"></div>
+          <div class="face f-bottom" data-face="bottom"></div>
+        </div>
+      </div>
+      <div class="hint">상자를 탭하면 테이프가 한 겹씩 벗겨져요</div>
+    </div>
+  </div>
+<script>
+(function () {
+  var SOUND_URI = "${soundDataUri}";
+  var tapeAudio = SOUND_URI ? new Audio(SOUND_URI) : null;
+  function playTapeSound() {
+    if (tapeAudio) {
+      tapeAudio.currentTime = 0;
+      var p = tapeAudio.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  }
+
+  var WRAP_GROUPS = ${wrapGroupsJson};
+  var MAX_PEELS = ${Math.max(0, Math.floor(maxPeels))};
+  var peelsDone = 0;
+  var SIDE = 150, HALF = SIDE / 2, TAPE_W = 30;
+  var scene = document.getElementById('scene');
+  var world = document.getElementById('world');
+  var stage = document.getElementById('stage');
+  var faces = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.face'), function (f) {
+    faces[f.dataset.face] = f;
+  });
+  var rotX = -16, rotY = -28;
+  function render() {
+    scene.style.transform = 'rotateX(' + rotX + 'deg) rotateY(' + rotY + 'deg)';
+  }
+  render();
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function placeTapeEl(el, faceName, x1, y1, x2, y2) {
+    if (!faces[faceName]) return;
+    var midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
+    var dx = x2 - x1, dy = y2 - y1;
+    var len = Math.hypot(dx, dy);
+    var ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    el.style.width = len + 'px';
+    el.style.height = TAPE_W + 'px';
+    el.style.left = (HALF + midX - len / 2) + 'px';
+    el.style.top = (HALF + midY - TAPE_W / 2) + 'px';
+    el.style.transform = 'rotate(' + ang + 'deg)';
+    el.style.transformOrigin = 'center center';
+    faces[faceName].appendChild(el);
+  }
+
+  // wraps[] = bands of tape, each band is the group of strips peeled by one tap.
+  var wraps = [];
+  function addStrip(group, faceName, x1, y1, x2, y2) {
+    var el = document.createElement('div');
+    el.className = 'tape';
+    placeTapeEl(el, faceName, x1, y1, x2, y2);
+    group.push(el);
+  }
+  WRAP_GROUPS.forEach(function (strips) {
+    var group = [];
+    strips.forEach(function (strip) {
+      addStrip(group, strip.face, strip.x1, strip.y1, strip.x2, strip.y2);
+    });
+    wraps.push(group);
+  });
+
+  function attemptsLeft() { return Math.max(0, MAX_PEELS - peelsDone); }
+  function notify() {
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(
+        JSON.stringify({
+          remaining: wraps.length,
+          attemptsLeft: attemptsLeft(),
+          // box fully unwrapped -> opened; allowance spent but still wrapped ->
+          // send it back to the conveyor for the next receiver.
+          done: wraps.length === 0,
+          exhausted: peelsDone >= MAX_PEELS && wraps.length > 0,
+        }),
+      );
+    }
+  }
+  notify();
+
+  function pulse() {
+    world.classList.remove('press');
+    void world.offsetWidth;
+    world.classList.add('press');
+  }
+
+  function peel() {
+    if (!wraps.length || peelsDone >= MAX_PEELS) return;
+    peelsDone++;
+    var group = wraps.pop();
+    group.forEach(function (el) {
+      el.classList.add('peeling');
+      setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 220);
+    });
+    pulse();
+    playTapeSound();
+    notify();
+  }
+
+  // Drag rotates the cube; a near-stationary press counts as a tap = peel.
+  function pOf(e) {
+    if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches[0]) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+  var dragStart = null, moved = 0;
+  function dragDown(e) {
+    var p = pOf(e);
+    dragStart = { x: p.x, y: p.y, rx: rotX, ry: rotY };
+    moved = 0;
+    e.preventDefault();
+  }
+  function dragMove(e) {
+    if (!dragStart) return;
+    var p = pOf(e);
+    moved = Math.max(moved, Math.hypot(p.x - dragStart.x, p.y - dragStart.y));
+    rotY = dragStart.ry + (p.x - dragStart.x) * 0.5;
+    rotX = clamp(dragStart.rx + (p.y - dragStart.y) * 0.5, -80, 80);
+    render();
+    e.preventDefault();
+  }
+  function dragUp() {
+    if (dragStart && moved < 8) peel();
+    dragStart = null;
+  }
+  stage.addEventListener('mousedown', dragDown);
+  stage.addEventListener('touchstart', dragDown, { passive: false });
+  window.addEventListener('mousemove', dragMove);
+  window.addEventListener('touchmove', dragMove, { passive: false });
+  window.addEventListener('mouseup', dragUp);
+  window.addEventListener('touchend', dragUp);
+  window.addEventListener('touchcancel', dragUp);
+})();
+</script>
+</body>
+</html>`;
+}
+
 export function displayCubeHtml(
   variant: BoxVariant,
   tapes: TapeData[],
   stamp?: 'confession' | 'ok',
+  disableSpin = false,
+  modelScale = 1.05,
 ): string {
   const hasLabel = variant === 'label';
   const labelPatch = hasLabel ? CUBE_FACE_TEMPLATES.label : '';
   const tapesJson = JSON.stringify(tapes);
-  const spinScript = stamp
-    ? ''
-    : `function spin(ts) {
+  const spinScript =
+    stamp || disableSpin
+      ? ''
+      : `function spin(ts) {
     rotY += 0.35;
     if (rotY >= 360) rotY -= 360;
     if (rotY <= -360) rotY += 360;
@@ -432,7 +671,7 @@ export function displayCubeHtml(
     display: flex; align-items: center; justify-content: center;
     perspective: 720px; perspective-origin: 50% 48%;
   }
-  #world { transform: scale(1.05); transform-style: preserve-3d; }
+  #world { transform: scale(${modelScale}); transform-style: preserve-3d; }
   #scene {
     position: relative; width: 150px; height: 150px;
     transform-style: preserve-3d; will-change: transform;
@@ -487,7 +726,7 @@ export function displayCubeHtml(
   </div>
 <script>
 (function () {
-  var SIDE = 150, HALF = SIDE / 2, TAPE_W = 22;
+  var SIDE = 150, HALF = SIDE / 2, TAPE_W = 30;
   var TAPES = ${tapesJson};
   var scene = document.getElementById('scene');
   var faces = {};
