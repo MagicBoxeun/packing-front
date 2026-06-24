@@ -154,27 +154,55 @@ test('parcel endpoints use expected paths, methods, query params, and bodies', a
   expect(calls()[2][1]?.body).toBe(JSON.stringify({ message: '답장' }));
 });
 
-test('401 responses refresh access token once and retry the original request', async () => {
+test('parcel tape updates are sent with remaining tape wraps', async () => {
+  const tapeWraps = [[{ face: 'front', x1: -70, y1: 0, x2: 70, y2: 0 }]];
   (globalThis.fetch as jest.Mock)
-    .mockResolvedValueOnce(fail('만료된 토큰입니다.', 401))
-    .mockResolvedValueOnce(ok({ accessToken: 'new-access-token' }))
-    .mockResolvedValueOnce(ok({ items: [], nextCursor: null }));
+    .mockResolvedValueOnce(ok({ success: true, content: '내용' }))
+    .mockResolvedValueOnce(
+      ok({
+        id: 'parcel-1',
+        nickname: '익명',
+        tagline: '테스트',
+        tapeWraps,
+      }),
+    );
 
   const api = new PackingApi();
-  api.setTokens('old-access-token', 'refresh-token');
-  await api.getFeed(10);
+  api.setTokens('access-token', 'refresh-token');
+  await api.openParcel('parcel-1', { tapeWraps: [] });
+  await api.updateParcelTapeWraps('parcel-1', tapeWraps);
 
-  expect(calls()[0][1]?.headers).toEqual(
-    expect.objectContaining({ Authorization: 'Bearer old-access-token' }),
-  );
-  expect(calls()[1][0]).toContain('/auth/refresh');
-  expect(calls()[1][1]?.body).toBe(
-    JSON.stringify({ refreshToken: 'refresh-token' }),
-  );
-  expect(calls()[2][1]?.headers).toEqual(
-    expect.objectContaining({ Authorization: 'Bearer new-access-token' }),
-  );
+  expect(calls()[0][0]).toContain('/parcels/parcel-1/open');
+  expect(calls()[0][1]?.body).toBe(JSON.stringify({ tapeWraps: [] }));
+  expect(calls()[1][0]).toContain('/parcels/parcel-1');
+  expect(calls()[1][1]?.method).toBe('PATCH');
+  expect(calls()[1][1]?.body).toBe(JSON.stringify({ tapeWraps }));
 });
+
+test.each([401, 403])(
+  '%s responses refresh access token once and retry the original request',
+  async status => {
+    (globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce(fail('만료된 토큰입니다.', status))
+      .mockResolvedValueOnce(ok({ accessToken: 'new-access-token' }))
+      .mockResolvedValueOnce(ok({ items: [], nextCursor: null }));
+
+    const api = new PackingApi();
+    api.setTokens('old-access-token', 'refresh-token');
+    await api.getFeed(10);
+
+    expect(calls()[0][1]?.headers).toEqual(
+      expect.objectContaining({ Authorization: 'Bearer old-access-token' }),
+    );
+    expect(calls()[1][0]).toContain('/auth/refresh');
+    expect(calls()[1][1]?.body).toBe(
+      JSON.stringify({ refreshToken: 'refresh-token' }),
+    );
+    expect(calls()[2][1]?.headers).toEqual(
+      expect.objectContaining({ Authorization: 'Bearer new-access-token' }),
+    );
+  },
+);
 
 test('failed envelopes throw ApiError with server message and status', async () => {
   (globalThis.fetch as jest.Mock).mockResolvedValueOnce(

@@ -1,5 +1,6 @@
 export type Step =
   | 'auth'
+  | 'intro'
   | 'landing'
   | 'letter-entry'
   | 'loading-check'
@@ -17,7 +18,13 @@ export type Step =
   | 'repack-prompt'
   | 'result-ok';
 
-export type BoxVariant = 'plain' | 'taped' | 'label' | 'label-taped' | 'open' | 'grid';
+export type BoxVariant =
+  | 'plain'
+  | 'taped'
+  | 'label'
+  | 'label-taped'
+  | 'open'
+  | 'grid';
 
 export type AutoStep = 'loading-check' | 'loading-send';
 
@@ -28,3 +35,5 @@ export type TapeData = {
   x2: number;
   y2: number;
 };
+
+export type TapeWrapGroup = TapeData[];

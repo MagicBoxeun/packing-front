@@ -1,3 +1,5 @@
+import type { TapeData, TapeWrapGroup } from './src/types';
+
 export const API_BASE_URL =
   (globalThis as { PACKING_API_BASE_URL?: string }).PACKING_API_BASE_URL ??
   'http://localhost:8080/api/v1';
@@ -21,9 +23,15 @@ export type AuthSession = {
 };
 
 export type ParcelFeedItem = {
+  authorId?: string;
   id: string;
   nickname: string;
+  ownerId?: string;
+  senderId?: string;
   tagline: string;
+  tapeWraps?: TapeWrapGroup[];
+  tapes?: TapeData[];
+  userId?: string;
 };
 
 export type ParcelCreated = ParcelFeedItem & {
@@ -94,6 +102,7 @@ export class PackingApi {
     nickname: string;
     tagline: string;
     content: string;
+    tapes?: TapeData[];
   }): Promise<ParcelCreated> {
     return this.request<ParcelCreated>('/parcels', {
       method: 'POST',
@@ -111,10 +120,29 @@ export class PackingApi {
     );
   }
 
-  async openParcel(id: string): Promise<{ success: boolean; content: string }> {
+  async openParcel(
+    id: string,
+    input?: { tapeWraps?: TapeWrapGroup[] },
+  ): Promise<{ success: boolean; content: string }> {
     return this.request<{ success: boolean; content: string }>(
       `/parcels/${encodeURIComponent(id)}/open`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
+  }
+
+  async updateParcelTapeWraps(
+    id: string,
+    tapeWraps: TapeWrapGroup[],
+  ): Promise<ParcelFeedItem> {
+    return this.request<ParcelFeedItem>(
+      `/parcels/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: { tapeWraps },
+      },
     );
   }
 
@@ -179,7 +207,7 @@ export class PackingApi {
       .catch(() => null)) as ApiEnvelope<T> | null;
 
     if (
-      response.status === 401 &&
+      (response.status === 401 || response.status === 403) &&
       auth &&
       retryOnUnauthorized &&
       (await this.refreshAccessToken())
