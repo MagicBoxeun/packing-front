@@ -8,6 +8,8 @@ export type Step =
   | 'sealed'
   | 'confession-stamped'
   | 'loading-send'
+  | 'reply-locker'
+  | 'reply-locker-detail'
   | 'locker-grid'
   | 'locker-detail'
   | 'tear-package'
@@ -37,3 +39,12 @@ export type TapeData = {
 };
 
 export type TapeWrapGroup = TapeData[];
+
+export type ReceivedLockerParcel = {
+  createdAt: string;
+  fromNickname?: string;
+  id: string;
+  message: string;
+  tapes: TapeData[];
+  toNickname?: string;
+};

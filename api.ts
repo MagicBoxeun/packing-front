@@ -1,4 +1,8 @@
-import type { TapeData, TapeWrapGroup } from './src/types';
+import type {
+  ReceivedLockerParcel,
+  TapeData,
+  TapeWrapGroup,
+} from './src/types';
 
 export const API_BASE_URL =
   (globalThis as { PACKING_API_BASE_URL?: string }).PACKING_API_BASE_URL ??
@@ -36,6 +40,25 @@ export type ParcelFeedItem = {
 
 export type ParcelCreated = ParcelFeedItem & {
   createdAt: string;
+};
+
+export type ReceivedReplyParcelApiItem = {
+  content?: string;
+  createdAt?: string;
+  from?: string;
+  fromNickname?: string;
+  id: string;
+  message?: string;
+  nickname?: string;
+  parcelId?: string;
+  reply?: string;
+  replyContent?: string;
+  respondentNickname?: string;
+  senderNickname?: string;
+  tapeWraps?: TapeWrapGroup[];
+  tapes?: TapeData[];
+  to?: string;
+  toNickname?: string;
 };
 
 export type Paged<T> = {
@@ -120,6 +143,32 @@ export class PackingApi {
     );
   }
 
+  async getReceivedReplies(): Promise<ReceivedLockerParcel[]> {
+    const payload = await this.request<
+      Paged<ReceivedReplyParcelApiItem> | ReceivedReplyParcelApiItem[]
+    >('/parcels/replies/received');
+    const items = Array.isArray(payload) ? payload : payload.items;
+    return items.map(item => ({
+      createdAt: item.createdAt ?? '',
+      fromNickname:
+        item.fromNickname ??
+        item.senderNickname ??
+        item.respondentNickname ??
+        item.from ??
+        item.nickname,
+      id:
+        item.id ??
+        item.parcelId ??
+        `${item.fromNickname ?? item.nickname ?? 'reply'}-${
+          item.createdAt ?? ''
+        }`,
+      message:
+        item.message ?? item.replyContent ?? item.reply ?? item.content ?? '',
+      tapes: item.tapes ?? (item.tapeWraps ? item.tapeWraps.flat() : []),
+      toNickname: item.toNickname ?? item.to,
+    }));
+  }
+
   async openParcel(
     id: string,
     input?: { tapeWraps?: TapeWrapGroup[] },
@@ -137,13 +186,10 @@ export class PackingApi {
     id: string,
     tapeWraps: TapeWrapGroup[],
   ): Promise<ParcelFeedItem> {
-    return this.request<ParcelFeedItem>(
-      `/parcels/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        body: { tapeWraps },
-      },
-    );
+    return this.request<ParcelFeedItem>(`/parcels/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: { tapeWraps },
+    });
   }
 
   async sendReply(
