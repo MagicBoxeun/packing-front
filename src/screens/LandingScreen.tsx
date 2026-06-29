@@ -1,7 +1,11 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ScreenFrame, TopBackLabel, WarehouseBackground } from '../components/common';
+import {
+  ScreenFrame,
+  TopBackLabel,
+  WarehouseBackground,
+} from '../components/common';
 import { BoxImg } from '../components/parcel';
 import { styles } from '../styles';
 
@@ -9,6 +13,7 @@ type LandingScreenProps = {
   apiBusy: boolean;
   onLogout: () => void;
   onOpenLocker: () => void;
+  onStealParcel: () => void;
   onWriteConfession: () => void;
 };
 
@@ -16,6 +21,7 @@ export function LandingScreen({
   apiBusy,
   onLogout,
   onOpenLocker,
+  onStealParcel,
   onWriteConfession,
 }: LandingScreenProps) {
   return (
@@ -39,7 +45,10 @@ export function LandingScreen({
           <BoxImg variant="taped" />
         </View>
         <View style={styles.landingActions}>
-          <Pressable onPress={onOpenLocker} style={styles.landingPrimaryButton}>
+          <Pressable
+            onPress={onStealParcel}
+            style={styles.landingPrimaryButton}
+          >
             <Text style={styles.landingPrimaryButtonText}>소포 훔치기</Text>
           </Pressable>
           <Pressable

@@ -14,7 +14,12 @@ import { AuthScreen } from './screens/AuthScreen';
 import { IntroScreen } from './screens/IntroScreen';
 import { LandingScreen } from './screens/LandingScreen';
 import { LetterComposeScreen, LetterReadScreen } from './screens/LetterScreens';
-import { LockerDetailScreen, LockerGridScreen } from './screens/LockerScreens';
+import {
+  LockerDetailScreen,
+  LockerGridScreen,
+  ReplyLockerDetailScreen,
+  ReplyLockerScreen,
+} from './screens/LockerScreens';
 import {
   AttachMessageScreen,
   LabelCompleteScreen,
@@ -32,7 +37,13 @@ import {
   buildTapeWrapsForParcel,
   tapeWrapsFromApi,
 } from './features/tape/tapeWraps';
-import { AutoStep, Step, TapeData, TapeWrapGroup } from './types';
+import {
+  AutoStep,
+  ReceivedLockerParcel,
+  Step,
+  TapeData,
+  TapeWrapGroup,
+} from './types';
 
 function isOwnParcel(
   pkg: ParcelFeedItem,
@@ -46,7 +57,7 @@ function isOwnParcel(
     return false;
   }
   const ownerId = pkg.authorId ?? pkg.userId ?? pkg.ownerId ?? pkg.senderId;
-  return ownerId === auth.user.id || pkg.nickname === auth.user.nickname;
+  return ownerId === auth.user.id;
 }
 
 function tapeWrapsForParcel(
@@ -100,6 +111,13 @@ export default function AppFlow() {
     {},
   );
   const [packedTapes, setPackedTapes] = useState<TapeData[]>([]);
+  const [receivedLockerParcels, setReceivedLockerParcels] = useState<
+    ReceivedLockerParcel[]
+  >([]);
+  const [receivedLockerLoading, setReceivedLockerLoading] = useState(false);
+  const [selectedReplyParcelId, setSelectedReplyParcelId] = useState<
+    string | null
+  >(null);
   const displayPackages = useMemo(
     () =>
       (DEV_STEP ? FALLBACK_PACKAGES : feedPackages).filter(
@@ -112,6 +130,11 @@ export default function AppFlow() {
     : selectedPackageState;
   const selectedParcel = selectedPackage
     ? displayPackages.find(pkg => pkg.id === selectedPackage) ?? null
+    : null;
+  const selectedReplyParcel = selectedReplyParcelId
+    ? receivedLockerParcels.find(
+        parcel => parcel.id === selectedReplyParcelId,
+      ) ?? null
     : null;
 
   useEffect(() => {
@@ -151,8 +174,21 @@ export default function AppFlow() {
     setOpenedContent('');
     setCreatedParcel(null);
     setPackedTapes([]);
+    setSelectedReplyParcelId(null);
     setApiMessage('');
   }, []);
+
+  const startNewConfession = () => {
+    setSelectedPackage(null);
+    setMessageDraft('');
+    setReplyDraft('');
+    setOpenedContent('');
+    setCreatedParcel(null);
+    setPackedTapes([]);
+    setSelectedReplyParcelId(null);
+    setApiMessage('');
+    setStep('letter-entry');
+  };
 
   const handleAuth = useCallback(async () => {
     const email = emailDraft.trim();
@@ -207,12 +243,15 @@ export default function AppFlow() {
       setSelectedPackage(null);
       setFeedPackages([]);
       setFeedLoading(false);
+      setReceivedLockerLoading(false);
       setMessageDraft('');
       setReplyDraft('');
       setOpenedContent('');
       setCreatedParcel(null);
       setPeelRemaining({});
       setPackedTapes([]);
+      setReceivedLockerParcels([]);
+      setSelectedReplyParcelId(null);
       setApiMessage('');
       setApiBusy(false);
       setStep('auth');
@@ -240,6 +279,27 @@ export default function AppFlow() {
     }
   }, [auth]);
 
+  const refreshReceivedReplies = useCallback(async () => {
+    if (!auth) {
+      return;
+    }
+
+    setReceivedLockerLoading(true);
+    setApiMessage('');
+    try {
+      const replies = await apiRef.current.getReceivedReplies();
+      setReceivedLockerParcels(replies);
+    } catch (error) {
+      setApiMessage(
+        error instanceof Error
+          ? error.message
+          : '받은 답장 택배를 불러오지 못했어요.',
+      );
+    } finally {
+      setReceivedLockerLoading(false);
+    }
+  }, [auth]);
+
   useEffect(() => {
     if (step === 'locker-grid') {
       if (skipNextFeedRefreshRef.current) {
@@ -249,6 +309,12 @@ export default function AppFlow() {
       refreshFeed();
     }
   }, [refreshFeed, step]);
+
+  useEffect(() => {
+    if (step === 'reply-locker') {
+      refreshReceivedReplies();
+    }
+  }, [refreshReceivedReplies, step]);
 
   const applyParcelTapeWraps = useCallback(
     (parcelId: string, tapeWraps: TapeWrapGroup[]) => {
@@ -281,6 +347,7 @@ export default function AppFlow() {
         tapes: packedTapes,
       });
       setCreatedParcel(parcel);
+      setMessageDraft('');
       goTo('loading-send');
     } catch (error) {
       setApiMessage(
@@ -291,29 +358,32 @@ export default function AppFlow() {
     }
   }, [auth, messageDraft, packedTapes]);
 
-  const handleOpenParcel = useCallback(async (tapeWraps?: TapeWrapGroup[]) => {
-    if (!selectedPackage) {
-      setApiMessage('열 소포를 먼저 골라주세요.');
-      return;
-    }
+  const handleOpenParcel = useCallback(
+    async (tapeWraps?: TapeWrapGroup[]) => {
+      if (!selectedPackage) {
+        setApiMessage('열 소포를 먼저 골라주세요.');
+        return;
+      }
 
-    setApiBusy(true);
-    setApiMessage('');
-    try {
-      const result = await apiRef.current.openParcel(
-        selectedPackage,
-        tapeWraps ? { tapeWraps } : undefined,
-      );
-      setOpenedContent(result.content);
-      setTimeout(() => goTo('opened'), 250);
-    } catch (error) {
-      setApiMessage(
-        error instanceof Error ? error.message : '소포를 열지 못했어요.',
-      );
-    } finally {
-      setApiBusy(false);
-    }
-  }, [selectedPackage]);
+      setApiBusy(true);
+      setApiMessage('');
+      try {
+        const result = await apiRef.current.openParcel(
+          selectedPackage,
+          tapeWraps ? { tapeWraps } : undefined,
+        );
+        setOpenedContent(result.content);
+        setTimeout(() => goTo('opened'), 250);
+      } catch (error) {
+        setApiMessage(
+          error instanceof Error ? error.message : '소포를 열지 못했어요.',
+        );
+      } finally {
+        setApiBusy(false);
+      }
+    },
+    [selectedPackage],
+  );
 
   const handleSendReply = useCallback(async () => {
     if (!selectedPackage || !replyDraft.trim()) {
@@ -442,16 +512,15 @@ export default function AppFlow() {
         />
       ) : null}
 
-      {step === 'intro' ? (
-        <IntroScreen onDone={() => goTo('landing')} />
-      ) : null}
+      {step === 'intro' ? <IntroScreen onDone={() => goTo('landing')} /> : null}
 
       {step === 'landing' ? (
         <LandingScreen
           apiBusy={apiBusy}
           onLogout={handleLogout}
-          onOpenLocker={() => goTo('locker-grid')}
-          onWriteConfession={() => goTo('letter-entry')}
+          onOpenLocker={() => goTo('reply-locker')}
+          onStealParcel={() => goTo('locker-grid')}
+          onWriteConfession={startNewConfession}
         />
       ) : null}
 
@@ -499,6 +568,26 @@ export default function AppFlow() {
 
       {step === 'loading-send' ? (
         <LoadingScreen text="소포를 집배원에게 주는 중,,,," />
+      ) : null}
+
+      {step === 'reply-locker' ? (
+        <ReplyLockerScreen
+          apiMessage={apiMessage}
+          loading={receivedLockerLoading}
+          parcels={receivedLockerParcels}
+          onBack={() => goTo('landing')}
+          onSelect={id => {
+            setSelectedReplyParcelId(id);
+            goTo('reply-locker-detail');
+          }}
+        />
+      ) : null}
+
+      {step === 'reply-locker-detail' ? (
+        <ReplyLockerDetailScreen
+          parcel={selectedReplyParcel}
+          onBack={() => goTo('reply-locker')}
+        />
       ) : null}
 
       {step === 'locker-grid' ? (
@@ -550,9 +639,11 @@ export default function AppFlow() {
         <AttachMessageScreen
           apiBusy={apiBusy}
           apiMessage={apiMessage}
+          fromNickname={auth?.user.nickname}
           onAttach={() => goTo('label-complete')}
           onReplyChange={setReplyDraft}
           replyDraft={replyDraft}
+          toNickname={selectedParcel?.nickname}
         />
       ) : null}
 
@@ -560,8 +651,10 @@ export default function AppFlow() {
         <LabelCompleteScreen
           apiBusy={apiBusy}
           apiMessage={apiMessage}
+          fromNickname={auth?.user.nickname}
           onComplete={handleSendReply}
           replyDraft={replyDraft}
+          toNickname={selectedParcel?.nickname}
         />
       ) : null}
 
@@ -578,7 +671,7 @@ export default function AppFlow() {
 
       {step === 'result-ok' ? (
         <StampedParcelScreen
-          onPress={() => goTo('locker-grid')}
+          onPress={() => goTo('reply-locker')}
           stamp="ok"
           tapes={packedTapes}
           variant="label"
