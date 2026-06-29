@@ -141,11 +141,15 @@ function SideParticleBurst() {
 }
 
 function ReplyLabelEditor({
+  fromNickname,
   onReplyChange,
   replyDraft,
+  toNickname,
 }: {
+  fromNickname?: string;
   onReplyChange: (value: string) => void;
   replyDraft: string;
+  toNickname?: string;
 }) {
   return (
     <View style={styles.attachLabelCard}>
@@ -155,8 +159,8 @@ function ReplyLabelEditor({
         <Barcode />
       </View>
       <View style={styles.attachLabelInfo}>
-        <Text style={styles.attachLabelSmall}>from.</Text>
-        <Text style={styles.attachLabelSmall}>to.</Text>
+        <Text style={styles.attachLabelSmall}>from. {fromNickname ?? ''}</Text>
+        <Text style={styles.attachLabelSmall}>to. {toNickname ?? ''}</Text>
       </View>
       <View style={styles.attachMemoBox}>
         <View style={styles.attachMemoTag}>
@@ -240,17 +244,21 @@ export function StampedParcelScreen({
 type AttachMessageScreenProps = {
   apiBusy: boolean;
   apiMessage: string;
+  fromNickname?: string;
   onAttach: () => void;
   onReplyChange: (value: string) => void;
   replyDraft: string;
+  toNickname?: string;
 };
 
 export function AttachMessageScreen({
   apiBusy,
   apiMessage,
+  fromNickname,
   onAttach,
   onReplyChange,
   replyDraft,
+  toNickname,
 }: AttachMessageScreenProps) {
   return (
     <ScreenFrame>
@@ -262,8 +270,10 @@ export function AttachMessageScreen({
             <BoxImg variant="plain" size={276} />
           </View>
           <ReplyLabelEditor
+            fromNickname={fromNickname}
             onReplyChange={onReplyChange}
             replyDraft={replyDraft}
+            toNickname={toNickname}
           />
         </View>
         <ActionPill
@@ -282,20 +292,30 @@ export function AttachMessageScreen({
 type LabelCompleteScreenProps = {
   apiBusy: boolean;
   apiMessage: string;
+  fromNickname?: string;
   onComplete: () => void;
   replyDraft: string;
+  toNickname?: string;
 };
 
 export function LabelCompleteScreen({
   apiBusy,
   apiMessage,
+  fromNickname,
   onComplete,
   replyDraft,
+  toNickname,
 }: LabelCompleteScreenProps) {
   return (
     <ScreenFrame>
       <DarkStage
-        box={<ShippingLabelCard body={replyDraft} />}
+        box={
+          <ShippingLabelCard
+            body={replyDraft}
+            from={fromNickname}
+            to={toNickname}
+          />
+        }
         footerDisabled={apiBusy}
         footerButton="작성완료"
         onFooterPress={onComplete}

@@ -74,9 +74,13 @@ export function ParcelTopCard() {
 export function ShippingLabelCard({
   body,
   compact,
+  from,
+  to,
 }: {
   body?: string;
   compact?: boolean;
+  from?: string;
+  to?: string;
 }) {
   return (
     <View style={[styles.shippingCard, compact && styles.shippingCardCompact]}>
@@ -90,8 +94,8 @@ export function ShippingLabelCard({
           <Text style={styles.verticalKorean}>정보</Text>
         </View>
         <View style={styles.shippingColBody}>
-          <Text style={styles.shippingText}>from.</Text>
-          <Text style={styles.shippingText}>to.</Text>
+          <Text style={styles.shippingText}>from. {from ?? ''}</Text>
+          <Text style={styles.shippingText}>to. {to ?? ''}</Text>
         </View>
         <Barcode small />
       </View>
