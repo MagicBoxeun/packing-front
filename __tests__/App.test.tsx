@@ -43,6 +43,7 @@ jest.mock('react-native-safe-area-context', () => {
 const App = require('../App').default;
 
 beforeEach(() => {
+  let receivedRepliesCallCount = 0;
   (globalThis as any).fetch = jest.fn(async (url: string, options?: any) => {
     const method = options?.method ?? 'GET';
     const path = String(url);
@@ -75,8 +76,9 @@ beforeEach(() => {
       return jsonResponse({
         items: [
           {
+            authorId: 'user-1',
             id: 'parcel-own',
-            nickname: '용감한 코알라',
+            nickname: '내 소포 작성자',
             tagline: '내가 보낸 소포',
           },
           {
@@ -84,7 +86,32 @@ beforeEach(() => {
             nickname: '익명의 고래',
             tagline: '늦잠을 버스 탓으로 돌렸어요',
           },
+          {
+            id: 'parcel-2',
+            nickname: '용감한 코알라',
+            tagline: '같은 닉네임이어도 다른 사람이 보낸 소포',
+          },
         ],
+        nextCursor: null,
+      });
+    }
+
+    if (path.endsWith('/parcels/replies/received') && method === 'GET') {
+      receivedRepliesCallCount += 1;
+      return jsonResponse({
+        items:
+          receivedRepliesCallCount === 1
+            ? []
+            : [
+                {
+                  createdAt: '2026-06-23T12:10:00',
+                  fromNickname: '익명의 고래',
+                  id: 'received-reply-1',
+                  message: '당신 고해성사 읽었어요. 저도 그런 적 있어요.',
+                  tapes: [{ face: 'front', x1: -70, y1: 0, x2: 70, y2: 0 }],
+                  toNickname: '용감한 코알라',
+                },
+              ],
         nextCursor: null,
       });
     }
@@ -167,11 +194,18 @@ function setInput(tree: any, placeholder: string, value: string) {
   ReactTestRenderer.act(() => input.props.onChangeText(value));
 }
 
+function inputValue(tree: any, placeholder: string) {
+  return tree.root.find(
+    (n: any) => n.type === 'TextInput' && n.props.placeholder === placeholder,
+  ).props.value;
+}
+
 async function finishIntro(tree: any) {
   // 네이티브 IntroScreen은 화면 탭으로 패널을 넘긴다. 6개 패널 모두 눌러 종료.
   for (let i = 0; i < 6; i++) {
     const pressable = tree.root.findAll(
-      (n: any) => n.type === 'Pressable' && typeof n.props.onPress === 'function',
+      (n: any) =>
+        n.type === 'Pressable' && typeof n.props.onPress === 'function',
     )[0];
     if (!pressable) {
       break;
@@ -247,22 +281,25 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
   // 로그인 후 인트로(산업 스파이) 시퀀스를 건너뛴다.
   await finishIntro(tree);
 
-  // landing -> locker-grid via steal CTA
+  // landing header -> reply locker
   expect(has(tree, '당신만의 고해성사')).toBe(true);
   await press(tree, '택배 보관함');
   await ReactTestRenderer.act(async () => {
     await Promise.resolve();
   });
-  expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
+  expect(has(tree, '내가 받은 택배를 보관해요')).toBe(true);
+  expect(has(tree, '아직 받은 택배가 없어요.')).toBe(true);
   await pressByA11y(tree, '뒤로');
   expect(has(tree, '당신만의 고해성사')).toBe(true);
 
+  // landing -> locker-grid via steal CTA
   await press(tree, '소포 훔치기');
   await ReactTestRenderer.act(async () => {
     await Promise.resolve();
   });
   expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
-  expect(has(tree, '용감한 코알라')).toBe(false);
+  expect(has(tree, '내 소포 작성자')).toBe(false);
+  expect(has(tree, '용감한 코알라')).toBe(true);
   await pressByA11y(tree, '뒤로');
   expect(has(tree, '당신만의 고해성사')).toBe(true);
 
@@ -335,14 +372,27 @@ test('every button click drives the expected navigation (no dead buttons)', asyn
   await finishTaping(tree);
   expect(has(tree, '우표를 찍었어요')).toBe(true);
 
-  // result-ok -> back to locker-grid
+  // result-ok -> back to reply locker
   await press(tree, '보관함으로 돌아가기');
   await ReactTestRenderer.act(async () => {
     await Promise.resolve();
   });
-  expect(has(tree, '받고싶은 소포를 골라보세요')).toBe(true);
+  expect(has(tree, '내가 받은 택배를 보관해요')).toBe(true);
+  expect(has(tree, 'from. 익명의 고래')).toBe(true);
+  expect(has(tree, 'to. 용감한 코알라')).toBe(true);
+  await press(tree, 'from. 익명의 고래');
+  expect(has(tree, '내가 받은 송장')).toBe(true);
+  expect(has(tree, '송장번호')).toBe(true);
+  expect(has(tree, '당신 고해성사 읽었어요. 저도 그런 적 있어요.')).toBe(true);
+  expect(has(tree, '괜찮아요')).toBe(false);
+  expect(has(tree, '오늘 지각을 했는데 버스 탓을 했어요.')).toBe(false);
+  await pressByA11y(tree, '뒤로');
+  expect(has(tree, '내가 받은 택배를 보관해요')).toBe(true);
 
-  // RESET -> landing
+  await pressByA11y(tree, '뒤로');
+  expect(has(tree, '당신만의 고해성사')).toBe(true);
+  await press(tree, '고해성사 보내기');
+  expect(inputValue(tree, '고해성사를 적어보세요')).toBe('');
   await pressByA11y(tree, '처음으로');
   expect(has(tree, '당신만의 고해성사')).toBe(true);
 

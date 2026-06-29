@@ -128,6 +128,21 @@ test('logout clears local tokens even when the server rejects logout', async () 
 test('parcel endpoints use expected paths, methods, query params, and bodies', async () => {
   (globalThis.fetch as jest.Mock)
     .mockResolvedValueOnce(ok({ items: [], nextCursor: 'next-cursor' }))
+    .mockResolvedValueOnce(
+      ok({
+        items: [
+          {
+            id: 'received-reply-1',
+            message: '받은 답장',
+            fromNickname: '상대',
+            toNickname: '사용자',
+            tapes: [],
+            createdAt: '2026-06-23T12:10:00',
+          },
+        ],
+        nextCursor: null,
+      }),
+    )
     .mockResolvedValueOnce(ok({ success: true, content: '내용' }))
     .mockResolvedValueOnce(
       ok({
@@ -140,18 +155,26 @@ test('parcel endpoints use expected paths, methods, query params, and bodies', a
   const api = new PackingApi();
   api.setTokens('access-token', 'refresh-token');
   await api.getFeed(3, 'cursor value');
+  const receivedReplies = await api.getReceivedReplies();
   await api.openParcel('parcel/id with spaces');
   await api.sendReply('parcel/id with spaces', '답장');
 
-  expect(calls()[0][0]).toContain(
-    '/parcels/feed?limit=3&cursor=cursor+value',
-  );
+  expect(calls()[0][0]).toContain('/parcels/feed?limit=3&cursor=cursor+value');
   expect(calls()[0][1]?.method).toBe('GET');
-  expect(calls()[1][0]).toContain('/parcels/parcel%2Fid%20with%20spaces/open');
-  expect(calls()[1][1]?.method).toBe('POST');
-  expect(calls()[2][0]).toContain('/parcels/parcel%2Fid%20with%20spaces/reply');
+  expect(calls()[1][0]).toContain('/parcels/replies/received');
+  expect(calls()[1][1]?.method).toBe('GET');
+  expect(receivedReplies[0]).toEqual(
+    expect.objectContaining({
+      fromNickname: '상대',
+      message: '받은 답장',
+      toNickname: '사용자',
+    }),
+  );
+  expect(calls()[2][0]).toContain('/parcels/parcel%2Fid%20with%20spaces/open');
   expect(calls()[2][1]?.method).toBe('POST');
-  expect(calls()[2][1]?.body).toBe(JSON.stringify({ message: '답장' }));
+  expect(calls()[3][0]).toContain('/parcels/parcel%2Fid%20with%20spaces/reply');
+  expect(calls()[3][1]?.method).toBe('POST');
+  expect(calls()[3][1]?.body).toBe(JSON.stringify({ message: '답장' }));
 });
 
 test('parcel tape updates are sent with remaining tape wraps', async () => {
